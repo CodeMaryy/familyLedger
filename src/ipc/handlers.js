@@ -58,9 +58,9 @@ function registerBookHandlers() {
  * 注册成员相关 IPC 处理器
  */
 function registerMemberHandlers() {
-  // 获取成员列表（按账本）
-  ipcMain.handle('members:list', wrapHandler((bookId) => {
-    return members.listMembers(bookId);
+  // 获取成员列表（全局成员，不再按账本区分）
+  ipcMain.handle('members:list', wrapHandler(() => {
+    return members.listMembers();
   }));
 
   // 添加成员

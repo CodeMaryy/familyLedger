@@ -5,17 +5,20 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "rebuild": "electron-rebuild -f -w better-sqlite3"
+    "dev": "concurrently \"npm run dev:renderer\" \"npm run dev:electron\"",
+    "dev:renderer": "cd renderer && npm run dev",
+    "dev:electron": "cross-env NODE_ENV=development electron .",
+    "build": "cd renderer && npm run build"
   },
   "keywords": ["electron", "sqlite", "ledger", "家庭记账"],
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "electron": "^28.0.0",
-    "electron-rebuild": "^3.2.9"
+    "concurrently": "^8.2.2",
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0"
   },
   "dependencies": {
-    "better-sqlite3": "^9.2.2"
+    "sql.js": "^1.11.0"
   }
 }
-

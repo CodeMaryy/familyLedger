@@ -38,10 +38,22 @@ export const AppLayout: React.FC<LayoutProps> = ({
   onViewChange,
   onAddTransaction 
 }) => {
-  const { ledgers, activeLedgerId, setActiveLedger, transactions } = useStore();
+  const { ledgers, activeLedgerId, setActiveLedger, transactions, loading } = useStore();
   
   const activeLedger = ledgers.find(l => l.id === activeLedgerId) || ledgers[0];
   const transactionCount = transactions.filter(t => t.ledgerId === activeLedgerId).length;
+
+  // 加载中或没有账本时显示提示
+  if (loading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-slate-50">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
+          <p className="text-slate-600">加载中...</p>
+        </div>
+      </div>
+    );
+  }
 
   const SidebarContent = () => (
     <div className="flex flex-col h-full bg-slate-50 border-r border-slate-200">
@@ -49,10 +61,10 @@ export const AppLayout: React.FC<LayoutProps> = ({
       <div className="p-4 flex items-center justify-between">
         <div className="flex items-center gap-2 cursor-pointer hover:bg-slate-200 p-2 rounded-lg transition-colors w-full">
           <div className="w-8 h-8 rounded-full bg-orange-600 flex items-center justify-center text-white font-bold">
-            {activeLedger.name[0]}
+            {activeLedger?.name?.[0] || '📚'}
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-medium truncate">{activeLedger.name}</p>
+            <p className="text-sm font-medium truncate">{activeLedger?.name || '请创建账本'}</p>
             <p className="text-xs text-slate-500">家庭账本</p>
           </div>
           <ChevronDown className="w-4 h-4 text-slate-400" />

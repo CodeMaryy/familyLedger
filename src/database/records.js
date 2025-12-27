@@ -2,7 +2,7 @@
  * 账目记录表 CRUD 操作及统计功能
  */
 
-const { getDb } = require('./db');
+const { queryAll, queryOne, run } = require('./db');
 
 /**
  * 获取指定账本的账目列表
@@ -18,7 +18,6 @@ const { getDb } = require('./db');
  * @returns {Array} 账目列表
  */
 function listRecords(bookId, options = {}) {
-  const db = getDb();
   const { startDate, endDate, direction, category, member_id, limit, offset } = options;
 
   let sql = `
@@ -65,8 +64,7 @@ function listRecords(bookId, options = {}) {
     }
   }
 
-  const stmt = db.prepare(sql);
-  return stmt.all(...params);
+  return queryAll(sql, params);
 }
 
 /**
@@ -75,8 +73,7 @@ function listRecords(bookId, options = {}) {
  * @returns {Object|undefined} 账目信息
  */
 function getRecordById(id) {
-  const db = getDb();
-  const stmt = db.prepare(`
+  return queryOne(`
     SELECT 
       r.id, r.book_id, r.member_id, r.direction, r.category, 
       r.amount, r.date, r.note, r.created_at,
@@ -84,8 +81,7 @@ function getRecordById(id) {
     FROM records r
     LEFT JOIN members m ON r.member_id = m.id
     WHERE r.id = ?
-  `);
-  return stmt.get(id);
+  `, [id]);
 }
 
 /**
@@ -101,15 +97,12 @@ function getRecordById(id) {
  * @returns {Object} 新增账目信息（包含 id）
  */
 function addRecord(data) {
-  const db = getDb();
   const { book_id, member_id = null, direction, category, amount, date, note = '' } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     INSERT INTO records (book_id, member_id, direction, category, amount, date, note) 
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const result = stmt.run(book_id, member_id, direction, category, amount, date, note);
+  `, [book_id, member_id, direction, category, amount, date, note]);
 
   return {
     id: result.lastInsertRowid,
@@ -131,10 +124,9 @@ function addRecord(data) {
  * @returns {Object} 更新结果
  */
 function updateRecord(id, data) {
-  const db = getDb();
   const { member_id, direction, category, amount, date, note } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     UPDATE records 
     SET member_id = COALESCE(?, member_id),
         direction = COALESCE(?, direction),
@@ -143,9 +135,7 @@ function updateRecord(id, data) {
         date = COALESCE(?, date),
         note = COALESCE(?, note)
     WHERE id = ?
-  `);
-
-  const result = stmt.run(member_id, direction, category, amount, date, note, id);
+  `, [member_id, direction, category, amount, date, note, id]);
 
   return {
     success: result.changes > 0,
@@ -159,9 +149,7 @@ function updateRecord(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteRecord(id) {
-  const db = getDb();
-  const stmt = db.prepare('DELETE FROM records WHERE id = ?');
-  const result = stmt.run(id);
+  const result = run('DELETE FROM records WHERE id = ?', [id]);
 
   return {
     success: result.changes > 0,
@@ -179,7 +167,6 @@ function deleteRecord(id) {
  * @returns {Object} 汇总统计 { income, expense, balance }
  */
 function getSummary(bookId, options = {}) {
-  const db = getDb();
   const { startDate, endDate, member_id } = options;
 
   let sql = `
@@ -204,13 +191,12 @@ function getSummary(bookId, options = {}) {
     params.push(member_id);
   }
 
-  const stmt = db.prepare(sql);
-  const result = stmt.get(...params);
+  const result = queryOne(sql, params);
 
   return {
-    income: result.income || 0,
-    expense: result.expense || 0,
-    balance: (result.income || 0) - (result.expense || 0),
+    income: result?.income || 0,
+    expense: result?.expense || 0,
+    balance: (result?.income || 0) - (result?.expense || 0),
   };
 }
 
@@ -225,7 +211,6 @@ function getSummary(bookId, options = {}) {
  * @returns {Array} 分类汇总列表 [{ category, total, count, percentage }]
  */
 function getCategorySummary(bookId, options = {}) {
-  const db = getDb();
   const { direction = 'expense', startDate, endDate, member_id } = options;
 
   // 先获取总金额
@@ -249,9 +234,8 @@ function getCategorySummary(bookId, options = {}) {
     totalParams.push(member_id);
   }
 
-  const totalStmt = db.prepare(totalSql);
-  const totalResult = totalStmt.get(...totalParams);
-  const grandTotal = totalResult.total || 0;
+  const totalResult = queryOne(totalSql, totalParams);
+  const grandTotal = totalResult?.total || 0;
 
   // 按分类汇总
   let sql = `
@@ -279,8 +263,7 @@ function getCategorySummary(bookId, options = {}) {
 
   sql += ' GROUP BY category ORDER BY total DESC';
 
-  const stmt = db.prepare(sql);
-  const results = stmt.all(...params);
+  const results = queryAll(sql, params);
 
   // 计算百分比
   return results.map((item) => ({
@@ -300,4 +283,3 @@ module.exports = {
   getSummary,
   getCategorySummary,
 };
-

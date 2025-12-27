@@ -12,6 +12,9 @@ const path = require('path');
 const { initDatabase } = require('./src/database/db');
 const { registerAllHandlers } = require('./src/ipc/handlers');
 
+// 判断是否为开发模式
+const isDev = process.env.NODE_ENV === 'development' || !app.isPackaged;
+
 // 主窗口引用
 let mainWindow = null;
 
@@ -29,15 +32,29 @@ function createWindow() {
     },
   });
 
-  // 加载前端页面（开发时可以使用本地服务器地址）
-  // mainWindow.loadURL('http://localhost:3000');
-  
-  // 或者加载本地 HTML 文件
-  mainWindow.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-
-  // 开发模式下打开开发者工具
-  if (process.env.NODE_ENV === 'development') {
+  // 根据环境加载不同的页面
+  if (isDev) {
+    // 开发模式：尝试加载 Vite 开发服务器（优先 3000，备选 3001）
+    const tryLoad = async (port) => {
+      try {
+        await mainWindow.loadURL(`http://localhost:${port}`);
+        console.log(`已连接到 Vite 开发服务器 (端口 ${port})`);
+      } catch (error) {
+        if (port === 3000) {
+          console.log('端口 3000 加载失败，尝试 3001...');
+          tryLoad(3001);
+        } else {
+          console.log('连接 Vite 服务器失败，3秒后重试...');
+          setTimeout(() => tryLoad(3000), 3000);
+        }
+      }
+    };
+    tryLoad(3000);
+    // 打开开发者工具
     mainWindow.webContents.openDevTools();
+  } else {
+    // 生产模式：加载打包后的文件
+    mainWindow.loadFile(path.join(__dirname, 'renderer', 'build', 'index.html'));
   }
 }
 

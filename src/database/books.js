@@ -2,20 +2,18 @@
  * 账本表 CRUD 操作
  */
 
-const { getDb } = require('./db');
+const { queryAll, queryOne, run } = require('./db');
 
 /**
  * 获取所有账本列表
  * @returns {Array} 账本列表
  */
 function listBooks() {
-  const db = getDb();
-  const stmt = db.prepare(`
+  return queryAll(`
     SELECT id, name, description, created_at 
     FROM books 
     ORDER BY created_at DESC
   `);
-  return stmt.all();
 }
 
 /**
@@ -24,13 +22,11 @@ function listBooks() {
  * @returns {Object|undefined} 账本信息
  */
 function getBookById(id) {
-  const db = getDb();
-  const stmt = db.prepare(`
+  return queryOne(`
     SELECT id, name, description, created_at 
     FROM books 
     WHERE id = ?
-  `);
-  return stmt.get(id);
+  `, [id]);
 }
 
 /**
@@ -41,15 +37,12 @@ function getBookById(id) {
  * @returns {Object} 新增账本信息（包含 id）
  */
 function addBook(data) {
-  const db = getDb();
   const { name, description = '' } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     INSERT INTO books (name, description) 
     VALUES (?, ?)
-  `);
-
-  const result = stmt.run(name, description);
+  `, [name, description]);
 
   return {
     id: result.lastInsertRowid,
@@ -68,17 +61,14 @@ function addBook(data) {
  * @returns {Object} 更新结果
  */
 function updateBook(id, data) {
-  const db = getDb();
   const { name, description } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     UPDATE books 
     SET name = COALESCE(?, name),
         description = COALESCE(?, description)
     WHERE id = ?
-  `);
-
-  const result = stmt.run(name, description, id);
+  `, [name, description, id]);
 
   return {
     success: result.changes > 0,
@@ -92,9 +82,7 @@ function updateBook(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteBook(id) {
-  const db = getDb();
-  const stmt = db.prepare('DELETE FROM books WHERE id = ?');
-  const result = stmt.run(id);
+  const result = run('DELETE FROM books WHERE id = ?', [id]);
 
   return {
     success: result.changes > 0,
@@ -109,4 +97,3 @@ module.exports = {
   updateBook,
   deleteBook,
 };
-

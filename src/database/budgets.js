@@ -2,7 +2,7 @@
  * 预算表 CRUD 操作
  */
 
-const { getDb } = require('./db');
+const { queryAll, queryOne, run } = require('./db');
 
 /**
  * 获取指定账本的预算列表
@@ -14,7 +14,6 @@ const { getDb } = require('./db');
  * @returns {Array} 预算列表
  */
 function listBudgets(bookId, options = {}) {
-  const db = getDb();
   const { direction, period, member_id } = options;
 
   let sql = `
@@ -43,8 +42,7 @@ function listBudgets(bookId, options = {}) {
 
   sql += ' ORDER BY b.category ASC';
 
-  const stmt = db.prepare(sql);
-  return stmt.all(...params);
+  return queryAll(sql, params);
 }
 
 /**
@@ -53,8 +51,7 @@ function listBudgets(bookId, options = {}) {
  * @returns {Object|undefined} 预算信息
  */
 function getBudgetById(id) {
-  const db = getDb();
-  const stmt = db.prepare(`
+  return queryOne(`
     SELECT 
       b.id, b.book_id, b.member_id, b.direction, b.category, 
       b.amount, b.period, b.date,
@@ -62,8 +59,7 @@ function getBudgetById(id) {
     FROM budgets b
     LEFT JOIN members m ON b.member_id = m.id
     WHERE b.id = ?
-  `);
-  return stmt.get(id);
+  `, [id]);
 }
 
 /**
@@ -74,20 +70,17 @@ function getBudgetById(id) {
  * @param {string} data.direction 类型：income/expense
  * @param {string} data.category 分类
  * @param {number} data.amount 金额
- * @param {string} data.period 周期 (monthly/yearly 等)
+ * @param {string} data.period 周期 (monthly/quarterly/yearly)
  * @param {string} data.date 生效日期
  * @returns {Object} 新增预算信息（包含 id）
  */
 function addBudget(data) {
-  const db = getDb();
   const { book_id, member_id = null, direction, category, amount, period, date } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     INSERT INTO budgets (book_id, member_id, direction, category, amount, period, date) 
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `);
-
-  const result = stmt.run(book_id, member_id, direction, category, amount, period, date);
+  `, [book_id, member_id, direction, category, amount, period, date]);
 
   return {
     id: result.lastInsertRowid,
@@ -108,10 +101,9 @@ function addBudget(data) {
  * @returns {Object} 更新结果
  */
 function updateBudget(id, data) {
-  const db = getDb();
   const { member_id, direction, category, amount, period, date } = data;
 
-  const stmt = db.prepare(`
+  const result = run(`
     UPDATE budgets 
     SET member_id = COALESCE(?, member_id),
         direction = COALESCE(?, direction),
@@ -120,9 +112,7 @@ function updateBudget(id, data) {
         period = COALESCE(?, period),
         date = COALESCE(?, date)
     WHERE id = ?
-  `);
-
-  const result = stmt.run(member_id, direction, category, amount, period, date, id);
+  `, [member_id, direction, category, amount, period, date, id]);
 
   return {
     success: result.changes > 0,
@@ -136,9 +126,7 @@ function updateBudget(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteBudget(id) {
-  const db = getDb();
-  const stmt = db.prepare('DELETE FROM budgets WHERE id = ?');
-  const result = stmt.run(id);
+  const result = run('DELETE FROM budgets WHERE id = ?', [id]);
 
   return {
     success: result.changes > 0,
@@ -155,7 +143,6 @@ function deleteBudget(id) {
  * @returns {Array} 预算执行情况列表
  */
 function getBudgetExecution(bookId, options = {}) {
-  const db = getDb();
   const { startDate, endDate } = options;
 
   // 获取所有预算
@@ -180,8 +167,7 @@ function getBudgetExecution(bookId, options = {}) {
 
   sql += ' GROUP BY category, direction';
 
-  const stmt = db.prepare(sql);
-  const actuals = stmt.all(...params);
+  const actuals = queryAll(sql, params);
 
   // 创建实际金额映射
   const actualMap = {};
@@ -215,4 +201,3 @@ module.exports = {
   deleteBudget,
   getBudgetExecution,
 };
-
