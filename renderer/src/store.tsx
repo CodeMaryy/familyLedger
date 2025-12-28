@@ -418,6 +418,7 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const deleteBudget = async (id: string) => {
+    console.log('[Store] deleteBudget called with id:', id);
     if (!isElectron()) {
       setData(prev => ({
         ...prev,
@@ -427,11 +428,13 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
 
     const success = await apiService.budgets.delete(id);
+    console.log('[Store] deleteBudget result:', success);
     if (success) {
-      setData(prev => ({
-        ...prev,
-        budgets: prev.budgets.filter(b => b.id !== id)
-      }));
+      // 删除成功后刷新数据，确保从数据库重新加载
+      console.log('[Store] Refreshing data after delete...');
+      await refreshData();
+    } else {
+      console.error('[Store] Failed to delete budget');
     }
   };
 
@@ -462,9 +465,10 @@ export const StoreProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     return JSON.stringify(data, null, 2);
   };
 
-  const refreshData = async () => {
+  const refreshData = useCallback(async () => {
+    console.log('[Store] refreshData called');
     await loadData();
-  };
+  }, [loadData]);
 
   return (
     <StoreContext.Provider value={{ 

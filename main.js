@@ -50,8 +50,13 @@ function createWindow() {
       }
     };
     tryLoad(3000);
-    // 打开开发者工具
+    // 打开开发者工具（前端调试）
     mainWindow.webContents.openDevTools();
+    
+    // 监听控制台消息
+    mainWindow.webContents.on('console-message', (event, level, message) => {
+      console.log(`[Renderer] ${message}`);
+    });
   } else {
     // 生产模式：加载打包后的文件
     mainWindow.loadFile(path.join(__dirname, 'renderer', 'build', 'index.html'));

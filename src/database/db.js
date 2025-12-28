@@ -164,8 +164,10 @@ function getDb() {
  * @returns {Array} 结果数组
  */
 function queryAll(sql, params = []) {
+  // sql.js 不允许 undefined，需要转换为 null
+  const sanitizedParams = params.map(p => p === undefined ? null : p);
   const stmt = db.prepare(sql);
-  stmt.bind(params);
+  stmt.bind(sanitizedParams);
   
   const results = [];
   while (stmt.step()) {
@@ -194,7 +196,9 @@ function queryOne(sql, params = []) {
  * @returns {Object} { changes, lastInsertRowid }
  */
 function run(sql, params = []) {
-  db.run(sql, params);
+  // sql.js 不允许 undefined，需要转换为 null
+  const sanitizedParams = params.map(p => p === undefined ? null : p);
+  db.run(sql, sanitizedParams);
   const changes = db.getRowsModified();
   const lastResult = queryOne('SELECT last_insert_rowid() as id');
   const lastInsertRowid = lastResult ? lastResult.id : 0;

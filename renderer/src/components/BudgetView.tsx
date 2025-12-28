@@ -5,6 +5,7 @@ import { Input } from './ui/input';
 import { Progress } from './ui/progress';
 import { Card, CardContent } from './ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogTrigger, DialogFooter } from './ui/dialog';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from './ui/alert-dialog';
 import { Label } from './ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from './ui/select';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover';
@@ -15,11 +16,12 @@ import { cn } from '../lib/utils';
 import { ArrowUpCircle, ArrowDownCircle, Wallet, PiggyBank, Plus, Trash2, ChevronLeft, ChevronRight, Calendar as CalendarIcon } from 'lucide-react';
 
 export const BudgetView: React.FC = () => {
-  const { transactions, activeLedgerId, budgets, setBudget, categories, addCategory, deleteCategory } = useStore();
+  const { transactions, activeLedgerId, budgets, setBudget, deleteBudget, categories, addCategory, deleteCategory } = useStore();
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editAmount, setEditAmount] = useState<string>('');
-  const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('monthly');
+  const [viewMode, setViewMode] = useState<'monthly' | 'yearly'>('yearly');
   const [currentDate, setCurrentDate] = useState<Date>(new Date());
+  const [deleteTarget, setDeleteTarget] = useState<{ categoryId: string; type: TransactionType; open: boolean } | null>(null);
   
   // Popover state for date picker
   const [isDateOpen, setIsDateOpen] = useState(false);
@@ -98,7 +100,7 @@ export const BudgetView: React.FC = () => {
 
   const handleSaveBudget = (categoryId: string, categoryName: string, type: TransactionType) => {
     const amount = parseFloat(editAmount);
-    if (!isNaN(amount)) {
+    if (!isNaN(amount) && amount > 0) {
       setBudget({
         id: '', // Will be handled by store
         ledgerId: activeLedgerId,
@@ -110,8 +112,29 @@ export const BudgetView: React.FC = () => {
         year: currentDate.getFullYear(),
         month: viewMode === 'monthly' ? currentDate.getMonth() + 1 : undefined
       });
+    } else if (amount === 0) {
+      // 如果输入为 0，删除预算
+      const budgetToDelete = getBudgetObj(categoryId, type);
+      if (budgetToDelete?.id) {
+        deleteBudget(budgetToDelete.id);
+      }
     }
     setEditingId(null);
+    setEditAmount('');
+  };
+
+  const handleDeleteBudget = async (categoryId: string, type: TransactionType) => {
+    console.log('[BudgetView] handleDeleteBudget called:', { categoryId, type });
+    const budget = getBudgetObj(categoryId, type);
+    console.log('[BudgetView] Found budget:', budget);
+    if (budget?.id) {
+      console.log('[BudgetView] Deleting budget with id:', budget.id);
+      await deleteBudget(budget.id);
+      setDeleteTarget(null);
+      console.log('[BudgetView] Budget deleted successfully');
+    } else {
+      console.warn('[BudgetView] No budget found to delete');
+    }
   };
 
   const handleAddCategory = () => {
@@ -209,26 +232,62 @@ export const BudgetView: React.FC = () => {
           </div>
         </div>
 
-        <div className="ml-6 flex flex-col items-end min-w-[100px]">
+        <div className="ml-6 flex flex-col items-end min-w-[120px]">
            <span className="text-xs text-slate-400 mb-1">预算目标</span>
            {editingId === cat.id ? (
-              <Input 
-                type="number" 
-                className="h-8 w-24 text-right pr-2" 
-                value={editAmount}
-                autoFocus
-                onChange={(e) => setEditAmount(e.target.value)}
-                onBlur={() => handleSaveBudget(cat.id, cat.label, cat.type)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSaveBudget(cat.id, cat.label, cat.type)}
-              />
+              <div className="flex items-center gap-1">
+                <Input 
+                  type="number" 
+                  className="h-8 w-24 text-right pr-2" 
+                  value={editAmount}
+                  autoFocus
+                  onChange={(e) => setEditAmount(e.target.value)}
+                  onBlur={() => handleSaveBudget(cat.id, cat.label, cat.type)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      handleSaveBudget(cat.id, cat.label, cat.type);
+                    } else if (e.key === 'Escape') {
+                      setEditingId(null);
+                      setEditAmount('');
+                    }
+                  }}
+                  placeholder="0"
+                />
+                {budgetAmount > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget({ categoryId: cat.id, type: cat.type, open: true });
+                    }}
+                    className="opacity-70 hover:opacity-100 text-red-500 transition-opacity p-1"
+                    title="删除预算"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             ) : (
-              <div 
-                className="group-hover:bg-slate-50 px-2 py-1 rounded cursor-pointer transition-colors text-right"
-                onClick={() => { setEditingId(cat.id); setEditAmount(budgetAmount.toString()); }}
-              >
-                 <span className={cn("text-lg font-bold font-mono border-b border-dashed border-slate-300", budgetAmount === 0 ? "text-slate-300" : "text-slate-700")}>
-                   {budgetAmount > 0 ? `¥${budgetAmount.toLocaleString()}` : '未设置'}
-                 </span>
+              <div className="flex items-center gap-2">
+                <div 
+                  className="group-hover:bg-slate-50 px-2 py-1 rounded cursor-pointer transition-colors text-right"
+                  onClick={() => { setEditingId(cat.id); setEditAmount(budgetAmount > 0 ? budgetAmount.toString() : ''); }}
+                >
+                   <span className={cn("text-lg font-bold font-mono border-b border-dashed border-slate-300", budgetAmount === 0 ? "text-slate-300" : "text-slate-700")}>
+                     {budgetAmount > 0 ? `¥${budgetAmount.toLocaleString()}` : '未设置'}
+                   </span>
+                </div>
+                {budgetAmount > 0 && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteTarget({ categoryId: cat.id, type: cat.type, open: true });
+                    }}
+                    className="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-red-500 transition-opacity p-1"
+                    title="删除预算"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
               </div>
             )}
         </div>
@@ -464,6 +523,48 @@ export const BudgetView: React.FC = () => {
            </div>
         </section>
       </div>
+
+      {/* 删除确认对话框 */}
+      {deleteTarget && (() => {
+        const cat = categories.find(c => c.id === deleteTarget.categoryId && c.type === deleteTarget.type);
+        const budget = getBudgetObj(deleteTarget.categoryId, deleteTarget.type);
+        console.log('[BudgetView] Rendering delete dialog:', { deleteTarget, cat, budget });
+        return (
+          <AlertDialog 
+            open={deleteTarget.open}
+            onOpenChange={(open) => {
+              console.log('[BudgetView] Dialog open changed:', open);
+              if (!open) {
+                setDeleteTarget(null);
+              }
+            }}
+          >
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>确认删除预算</AlertDialogTitle>
+                <AlertDialogDescription>
+                  确定要删除 <strong>{cat?.label || ''}</strong> 的预算（¥{budget?.amount.toLocaleString() || 0}）吗？此操作无法撤销。
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter style={{ display: 'flex', flexDirection: 'row', gap: '8px', justifyContent: 'flex-end' }}>
+                <AlertDialogCancel>取消</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={(e) => {
+                    e.preventDefault();
+                    console.log('[BudgetView] Delete button clicked');
+                    if (deleteTarget) {
+                      handleDeleteBudget(deleteTarget.categoryId, deleteTarget.type);
+                    }
+                  }} 
+                  style={{ backgroundColor: '#dc2626', color: 'white' }}
+                >
+                  删除
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+        );
+      })()}
 
     </div>
   );

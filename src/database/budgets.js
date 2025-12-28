@@ -63,7 +63,7 @@ function getBudgetById(id) {
 }
 
 /**
- * 添加新预算
+ * 添加或更新预算（按 book_id + category 判断是否存在）
  * @param {Object} data 预算数据
  * @param {number} data.book_id 账本 ID
  * @param {number} [data.member_id] 成员 ID
@@ -72,26 +72,65 @@ function getBudgetById(id) {
  * @param {number} data.amount 金额
  * @param {string} data.period 周期 (monthly/quarterly/yearly)
  * @param {string} data.date 生效日期
- * @returns {Object} 新增预算信息（包含 id）
+ * @returns {Object} 预算信息（包含 id）
  */
 function addBudget(data) {
   const { book_id, member_id = null, direction, category, amount, period, date } = data;
 
-  const result = run(`
-    INSERT INTO budgets (book_id, member_id, direction, category, amount, period, date) 
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [book_id, member_id, direction, category, amount, period, date]);
+  // 参数验证：确保必需字段不为 undefined
+  if (book_id === undefined || direction === undefined || category === undefined || 
+      amount === undefined || period === undefined || date === undefined) {
+    throw new Error('预算数据不完整：book_id, direction, category, amount, period, date 为必需字段');
+  }
 
-  return {
-    id: result.lastInsertRowid,
-    book_id,
-    member_id,
-    direction,
-    category,
-    amount,
-    period,
-    date,
-  };
+  // 查询是否已存在相同 book_id + category 的预算，取最新的一条
+  const existing = queryOne(`
+    SELECT id FROM budgets 
+    WHERE book_id = ? AND category = ?
+    ORDER BY id DESC
+    LIMIT 1
+  `, [book_id, category]);
+
+  if (existing) {
+    // 存在则更新
+    run(`
+      UPDATE budgets 
+      SET member_id = ?,
+          direction = ?,
+          amount = ?,
+          period = ?,
+          date = ?
+      WHERE id = ?
+    `, [member_id, direction, amount, period, date, existing.id]);
+
+    return {
+      id: existing.id,
+      book_id,
+      member_id,
+      direction,
+      category,
+      amount,
+      period,
+      date,
+    };
+  } else {
+    // 不存在则新增
+    const result = run(`
+      INSERT INTO budgets (book_id, member_id, direction, category, amount, period, date) 
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [book_id, member_id, direction, category, amount, period, date]);
+
+    return {
+      id: result.lastInsertRowid,
+      book_id,
+      member_id,
+      direction,
+      category,
+      amount,
+      period,
+      date,
+    };
+  }
 }
 
 /**
@@ -126,12 +165,16 @@ function updateBudget(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteBudget(id) {
+  console.log('[Database] deleteBudget called with id:', id);
   const result = run('DELETE FROM budgets WHERE id = ?', [id]);
+  console.log('[Database] deleteBudget SQL result:', result);
 
-  return {
+  const deleteResult = {
     success: result.changes > 0,
     changes: result.changes,
   };
+  console.log('[Database] deleteBudget returning:', deleteResult);
+  return deleteResult;
 }
 
 /**

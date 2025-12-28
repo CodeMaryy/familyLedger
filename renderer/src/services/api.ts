@@ -309,14 +309,32 @@ export const apiService = {
     async add(budget: Omit<Budget, 'id'>): Promise<Budget | null> {
       if (!isElectron()) return null;
       
-      const date = new Date(budget.year, (budget.month || 1) - 1, 1);
+      // 根据 period 类型计算正确的日期（使用本地日期格式，避免时区问题）
+      let year = budget.year;
+      let month: number;
+      let day = 1;
+      
+      if (budget.period === 'yearly') {
+        // 按年：取当年1月1日
+        month = 1;
+      } else if (budget.period === 'quarterly') {
+        // 按季度：取当季度第一天（1月/4月/7月/10月的1日）
+        month = Math.floor(((budget.month || 1) - 1) / 3) * 3 + 1;
+      } else {
+        // 按月：取当月第一天
+        month = budget.month || 1;
+      }
+      
+      // 格式化为 YYYY-MM-DD（不使用 toISOString 避免时区问题）
+      const dateStr = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      
       const res = await window.api!.budgets.add({
         book_id: Number(budget.ledgerId),
         direction: budget.type,
         category: budget.categoryId,
         amount: budget.amount,
         period: budget.period as 'monthly' | 'quarterly' | 'yearly',
-        date: date.toISOString().split('T')[0],
+        date: dateStr,
       });
       
       if (res.success && res.data) {
@@ -333,9 +351,25 @@ export const apiService = {
       if (data.categoryId !== undefined) updateData.category = data.categoryId;
       if (data.amount !== undefined) updateData.amount = data.amount;
       if (data.period !== undefined) updateData.period = data.period;
-      if (data.year !== undefined && data.month !== undefined) {
-        const date = new Date(data.year, data.month - 1, 1);
-        updateData.date = date.toISOString().split('T')[0];
+      
+      // 根据 period 类型计算正确的日期（使用本地日期格式，避免时区问题）
+      if (data.year !== undefined) {
+        let year = data.year;
+        let month: number;
+        let day = 1;
+        
+        if (data.period === 'yearly') {
+          // 按年：取当年1月1日
+          month = 1;
+        } else if (data.period === 'quarterly') {
+          // 按季度：取当季度第一天
+          month = Math.floor(((data.month || 1) - 1) / 3) * 3 + 1;
+        } else {
+          // 按月：取当月第一天
+          month = data.month || 1;
+        }
+        
+        updateData.date = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
       }
       
       const res = await window.api!.budgets.update(Number(id), updateData);
@@ -345,8 +379,12 @@ export const apiService = {
     async delete(id: string): Promise<boolean> {
       if (!isElectron()) return false;
       
+      console.log('[API Service] Deleting budget with id:', id);
       const res = await window.api!.budgets.delete(Number(id));
-      return res.success && res.data?.success === true;
+      console.log('[API Service] Delete response:', res);
+      const success = res.success && res.data?.success === true;
+      console.log('[API Service] Delete success:', success);
+      return success;
     },
 
     async execution(

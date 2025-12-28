@@ -27,6 +27,72 @@ export const ReportsView: React.FC = () => {
   const lastYearExpense = lastYearTransactions.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
   const lastYearBalance = lastYearIncome - lastYearExpense;
 
+  // ==================== 支出预算计算 ====================
+  // 计算年度支出预算总和
+  const yearlyExpenseBudgets = activeBudgets.filter(b => 
+    b.period === 'yearly' && 
+    b.type === 'expense' && 
+    b.year === parseInt(year)
+  );
+  const totalYearlyExpenseBudget = yearlyExpenseBudgets.reduce((s, b) => s + b.amount, 0);
+
+  // 先计算所有月份的月度支出预算
+  const monthlyExpenseBudgetMap: Record<number, number> = {};
+  let totalMonthlyExpenseBudget = 0;
+  for (let month = 1; month <= 12; month++) {
+    const monthBudgets = activeBudgets.filter(b => 
+      b.period === 'monthly' && 
+      b.type === 'expense' && 
+      b.year === parseInt(year) && 
+      b.month === month
+    );
+    const monthTotal = monthBudgets.reduce((s, b) => s + b.amount, 0);
+    monthlyExpenseBudgetMap[month] = monthTotal;
+    totalMonthlyExpenseBudget += monthTotal;
+  }
+
+  // 计算未设置月度支出预算的月份数量
+  const monthsWithoutExpenseBudget = Object.values(monthlyExpenseBudgetMap).filter(v => v === 0).length;
+  
+  // 计算剩余年度支出预算（年度预算 - 已设置的月度预算总和）
+  const remainingYearlyExpenseBudget = totalYearlyExpenseBudget - totalMonthlyExpenseBudget;
+  
+  // 未设置月份的支出预算 = 剩余年度预算 / 未设置月份数量
+  const defaultMonthlyExpenseBudget = monthsWithoutExpenseBudget > 0 ? remainingYearlyExpenseBudget / monthsWithoutExpenseBudget : 0;
+
+  // ==================== 收入预算计算 ====================
+  // 计算年度收入预算总和
+  const yearlyIncomeBudgets = activeBudgets.filter(b => 
+    b.period === 'yearly' && 
+    b.type === 'income' && 
+    b.year === parseInt(year)
+  );
+  const totalYearlyIncomeBudget = yearlyIncomeBudgets.reduce((s, b) => s + b.amount, 0);
+
+  // 先计算所有月份的月度收入预算
+  const monthlyIncomeBudgetMap: Record<number, number> = {};
+  let totalMonthlyIncomeBudget = 0;
+  for (let month = 1; month <= 12; month++) {
+    const monthBudgets = activeBudgets.filter(b => 
+      b.period === 'monthly' && 
+      b.type === 'income' && 
+      b.year === parseInt(year) && 
+      b.month === month
+    );
+    const monthTotal = monthBudgets.reduce((s, b) => s + b.amount, 0);
+    monthlyIncomeBudgetMap[month] = monthTotal;
+    totalMonthlyIncomeBudget += monthTotal;
+  }
+
+  // 计算未设置月度收入预算的月份数量
+  const monthsWithoutIncomeBudget = Object.values(monthlyIncomeBudgetMap).filter(v => v === 0).length;
+  
+  // 计算剩余年度收入预算（年度预算 - 已设置的月度预算总和）
+  const remainingYearlyIncomeBudget = totalYearlyIncomeBudget - totalMonthlyIncomeBudget;
+  
+  // 未设置月份的收入预算 = 剩余年度预算 / 未设置月份数量
+  const defaultMonthlyIncomeBudget = monthsWithoutIncomeBudget > 0 ? remainingYearlyIncomeBudget / monthsWithoutIncomeBudget : 0;
+
   // Prepare Chart Data for 3-Pillar View
   const chartData = Array.from({ length: 12 }, (_, i) => {
     const month = i + 1;
@@ -39,20 +105,24 @@ export const ReportsView: React.FC = () => {
     const mIncome = monthTrans.filter(t => t.type === 'income').reduce((s, t) => s + t.amount, 0);
     const mExpense = monthTrans.filter(t => t.type === 'expense').reduce((s, t) => s + t.amount, 0);
     
-    // Calculate Budget (Expense Budget)
-    const monthBudgets = activeBudgets.filter(b => 
-      b.period === 'monthly' && 
-      b.type === 'expense' && 
-      b.year === parseInt(year) && 
-      b.month === month
-    );
-    const mBudget = monthBudgets.reduce((s, b) => s + b.amount, 0);
+    // Calculate Expense Budget
+    // 如果该月有设置的月度支出预算，使用设置的值；否则使用平均分配的年度预算
+    const mExpenseBudget = monthlyExpenseBudgetMap[month] > 0 
+      ? monthlyExpenseBudgetMap[month] 
+      : defaultMonthlyExpenseBudget;
+    
+    // Calculate Income Budget
+    // 如果该月有设置的月度收入预算，使用设置的值；否则使用平均分配的年度预算
+    const mIncomeBudget = monthlyIncomeBudgetMap[month] > 0 
+      ? monthlyIncomeBudgetMap[month] 
+      : defaultMonthlyIncomeBudget;
     
     return {
       name: `${month}月`,
       income: mIncome,
       expense: mExpense,
-      budget: mBudget
+      expenseBudget: mExpenseBudget,
+      incomeBudget: mIncomeBudget
     };
   });
 
@@ -65,6 +135,38 @@ export const ReportsView: React.FC = () => {
       name: item.name,
       balance: runningBalance,
       net: net
+    };
+  });
+
+  // ==================== 总资产变化趋势（按年统计）====================
+  // 获取所有有交易的年份
+  const yearSet = new Set<number>();
+  activeTransactions.forEach(t => {
+    yearSet.add(parseISO(t.date).getFullYear());
+  });
+  const allYears = Array.from(yearSet).sort((a, b) => a - b);
+
+  // 计算每年的总资产（截止到当年结束的总收入 - 总支出）
+  const totalAssetsByYear = allYears.map(year => {
+    // 获取截止到该年结束的所有交易
+    const yearEndTransactions = activeTransactions.filter(t => {
+      const tYear = parseISO(t.date).getFullYear();
+      return tYear <= year;
+    });
+    
+    const totalIncome = yearEndTransactions
+      .filter(t => t.type === 'income')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalExpense = yearEndTransactions
+      .filter(t => t.type === 'expense')
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    return {
+      year: `${year}年`,
+      totalAssets: totalIncome - totalExpense,
+      totalIncome,
+      totalExpense
     };
   });
 
@@ -112,15 +214,26 @@ export const ReportsView: React.FC = () => {
                <ResponsiveContainer width="100%" height={350}>
                  <BarChart data={chartData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                   <XAxis 
+                     dataKey="name" 
+                     axisLine={false} 
+                     tickLine={false} 
+                     tick={{ fontSize: 12, fill: '#64748b' }}
+                     padding={{ left: 20, right: 20 }}
+                   />
                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                    <Tooltip 
                      cursor={{ fill: '#f8fafc' }}
                      contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }} 
                    />
                    <Legend iconType="circle" />
+                   {/* 收入预算 - 浅绿色 */}
+                   <Bar dataKey="incomeBudget" name="收入预算" fill="#86efac" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                   {/* 实际收入 - 深绿色 */}
                    <Bar dataKey="income" name="实际收入" fill="#22c55e" radius={[4, 4, 0, 0]} maxBarSize={40} />
-                   <Bar dataKey="budget" name="支出预算" fill="#94a3b8" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                   {/* 支出预算 - 浅红色/橙色 */}
+                   <Bar dataKey="expenseBudget" name="支出预算" fill="#fca5a5" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                   {/* 实际支出 - 深红色 */}
                    <Bar dataKey="expense" name="实际支出" fill="#ef4444" radius={[4, 4, 0, 0]} maxBarSize={40} />
                  </BarChart>
                </ResponsiveContainer>
@@ -137,7 +250,13 @@ export const ReportsView: React.FC = () => {
                <ResponsiveContainer width="100%" height={300}>
                  <LineChart data={trendData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-                   <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
+                   <XAxis 
+                     dataKey="name" 
+                     axisLine={false} 
+                     tickLine={false} 
+                     tick={{ fontSize: 12, fill: '#64748b' }}
+                     padding={{ left: 20, right: 20 }}
+                   />
                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#64748b' }} />
                    <Tooltip 
                      cursor={{ stroke: '#cbd5e1' }}
@@ -166,6 +285,50 @@ export const ReportsView: React.FC = () => {
           </CardHeader>
           <CardContent>
              <Charts type="distribution" dataType="expense" transactions={yearTransactions} />
+          </CardContent>
+        </Card>
+
+        {/* 总资产变化趋势图 */}
+        <Card className="lg:col-span-2">
+          <CardHeader>
+            <CardTitle>总资产变化趋势</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="w-full">
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={totalAssetsByYear} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
+                  <XAxis 
+                    dataKey="year" 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: '#64748b' }}
+                    padding={{ left: 20, right: 20 }}
+                  />
+                  <YAxis 
+                    axisLine={false} 
+                    tickLine={false} 
+                    tick={{ fontSize: 12, fill: '#64748b' }}
+                    tickFormatter={(value) => `¥${(value / 10000).toFixed(1)}万`}
+                  />
+                  <Tooltip 
+                    cursor={{ stroke: '#cbd5e1' }}
+                    contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
+                    formatter={(value: number) => [`¥${value.toLocaleString()}`, '总资产']}
+                  />
+                  <Legend iconType="circle" />
+                  <Line 
+                    type="monotone" 
+                    dataKey="totalAssets" 
+                    name="总资产" 
+                    stroke="#0ea5e9" 
+                    strokeWidth={3} 
+                    dot={{ r: 5, strokeWidth: 2, fill: '#0ea5e9' }} 
+                    activeDot={{ r: 7 }} 
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </CardContent>
         </Card>
       </div>

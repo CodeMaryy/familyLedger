@@ -135,7 +135,10 @@ function registerBudgetHandlers() {
 
   // 删除预算
   ipcMain.handle('budgets:delete', wrapHandler((id) => {
-    return budgets.deleteBudget(id);
+    console.log('[IPC Handler] budgets:delete called with id:', id);
+    const result = budgets.deleteBudget(id);
+    console.log('[IPC Handler] budgets:delete result:', result);
+    return result;
   }));
 
   // 获取预算执行情况
