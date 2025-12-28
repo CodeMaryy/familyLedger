@@ -22,11 +22,12 @@ function listBooks() {
  * @returns {Object|undefined} 账本信息
  */
 function getBookById(id) {
+  const idInt = Number(id);
   return queryOne(`
     SELECT id, name, description, created_at 
     FROM books 
-    WHERE id = ?
-  `, [id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [idInt]);
 }
 
 /**
@@ -62,13 +63,16 @@ function addBook(data) {
  */
 function updateBook(id, data) {
   const { name, description } = data;
+  
+  // 确保 id 是数字类型
+  const idInt = Number(id);
 
   const result = run(`
     UPDATE books 
     SET name = COALESCE(?, name),
         description = COALESCE(?, description)
-    WHERE id = ?
-  `, [name, description, id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [name, description, idInt]);
 
   return {
     success: result.changes > 0,
@@ -82,7 +86,8 @@ function updateBook(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteBook(id) {
-  const result = run('DELETE FROM books WHERE id = ?', [id]);
+  const idInt = Number(id);
+  const result = run('DELETE FROM books WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?', [idInt]);
 
   return {
     success: result.changes > 0,

@@ -19,6 +19,9 @@ const { queryAll, queryOne, run } = require('./db');
  */
 function listRecords(bookId, options = {}) {
   const { startDate, endDate, direction, category, member_id, limit, offset } = options;
+  
+  // 确保 bookId 是数字类型
+  const bookIdInt = Number(bookId);
 
   let sql = `
     SELECT 
@@ -27,9 +30,9 @@ function listRecords(bookId, options = {}) {
       m.name as member_name
     FROM records r
     LEFT JOIN members m ON r.member_id = m.id
-    WHERE r.book_id = ?
+    WHERE CAST(TRIM(CAST(r.book_id AS TEXT)) AS INTEGER) = ?
   `;
-  const params = [bookId];
+  const params = [bookIdInt];
 
   // 动态添加查询条件
   if (startDate) {
@@ -49,8 +52,9 @@ function listRecords(bookId, options = {}) {
     params.push(category);
   }
   if (member_id) {
-    sql += ' AND r.member_id = ?';
-    params.push(member_id);
+    const memberIdInt = Number(member_id);
+    sql += ' AND CAST(TRIM(CAST(r.member_id AS TEXT)) AS INTEGER) = ?';
+    params.push(memberIdInt);
   }
 
   sql += ' ORDER BY r.date DESC, r.created_at DESC';
@@ -73,6 +77,7 @@ function listRecords(bookId, options = {}) {
  * @returns {Object|undefined} 账目信息
  */
 function getRecordById(id) {
+  const idInt = Number(id);
   return queryOne(`
     SELECT 
       r.id, r.book_id, r.member_id, r.direction, r.category, 
@@ -80,8 +85,8 @@ function getRecordById(id) {
       m.name as member_name
     FROM records r
     LEFT JOIN members m ON r.member_id = m.id
-    WHERE r.id = ?
-  `, [id]);
+    WHERE CAST(TRIM(CAST(r.id AS TEXT)) AS INTEGER) = ?
+  `, [idInt]);
 }
 
 /**
@@ -98,11 +103,15 @@ function getRecordById(id) {
  */
 function addRecord(data) {
   const { book_id, member_id = null, direction, category, amount, date, note = '' } = data;
+  
+  // 确保所有 id 字段都是数字类型
+  const bookIdInt = Number(book_id);
+  const memberIdInt = member_id ? Number(member_id) : null;
 
   const result = run(`
     INSERT INTO records (book_id, member_id, direction, category, amount, date, note) 
     VALUES (?, ?, ?, ?, ?, ?, ?)
-  `, [book_id, member_id, direction, category, amount, date, note]);
+  `, [bookIdInt, memberIdInt, direction, category, amount, date, note]);
 
   return {
     id: result.lastInsertRowid,
@@ -125,6 +134,10 @@ function addRecord(data) {
  */
 function updateRecord(id, data) {
   const { member_id, direction, category, amount, date, note } = data;
+  
+  // 确保所有 id 字段都是数字类型
+  const idInt = Number(id);
+  const memberIdInt = member_id ? Number(member_id) : null;
 
   const result = run(`
     UPDATE records 
@@ -134,8 +147,8 @@ function updateRecord(id, data) {
         amount = COALESCE(?, amount),
         date = COALESCE(?, date),
         note = COALESCE(?, note)
-    WHERE id = ?
-  `, [member_id, direction, category, amount, date, note, id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [memberIdInt, direction, category, amount, date, note, idInt]);
 
   return {
     success: result.changes > 0,
@@ -149,7 +162,8 @@ function updateRecord(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteRecord(id) {
-  const result = run('DELETE FROM records WHERE id = ?', [id]);
+  const idInt = Number(id);
+  const result = run('DELETE FROM records WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?', [idInt]);
 
   return {
     success: result.changes > 0,
@@ -168,15 +182,18 @@ function deleteRecord(id) {
  */
 function getSummary(bookId, options = {}) {
   const { startDate, endDate, member_id } = options;
+  
+  // 确保 bookId 是数字类型
+  const bookIdInt = Number(bookId);
 
   let sql = `
     SELECT 
       COALESCE(SUM(CASE WHEN direction = 'income' THEN amount ELSE 0 END), 0) as income,
       COALESCE(SUM(CASE WHEN direction = 'expense' THEN amount ELSE 0 END), 0) as expense
     FROM records 
-    WHERE book_id = ?
+    WHERE CAST(TRIM(CAST(book_id AS TEXT)) AS INTEGER) = ?
   `;
-  const params = [bookId];
+  const params = [bookIdInt];
 
   if (startDate) {
     sql += ' AND date >= ?';
@@ -187,8 +204,9 @@ function getSummary(bookId, options = {}) {
     params.push(endDate);
   }
   if (member_id) {
-    sql += ' AND member_id = ?';
-    params.push(member_id);
+    const memberIdInt = Number(member_id);
+    sql += ' AND CAST(TRIM(CAST(member_id AS TEXT)) AS INTEGER) = ?';
+    params.push(memberIdInt);
   }
 
   const result = queryOne(sql, params);
@@ -212,14 +230,17 @@ function getSummary(bookId, options = {}) {
  */
 function getCategorySummary(bookId, options = {}) {
   const { direction = 'expense', startDate, endDate, member_id } = options;
+  
+  // 确保 bookId 是数字类型
+  const bookIdInt = Number(bookId);
 
   // 先获取总金额
   let totalSql = `
     SELECT COALESCE(SUM(amount), 0) as total
     FROM records 
-    WHERE book_id = ? AND direction = ?
+    WHERE CAST(TRIM(CAST(book_id AS TEXT)) AS INTEGER) = ? AND direction = ?
   `;
-  const totalParams = [bookId, direction];
+  const totalParams = [bookIdInt, direction];
 
   if (startDate) {
     totalSql += ' AND date >= ?';
@@ -244,9 +265,9 @@ function getCategorySummary(bookId, options = {}) {
       SUM(amount) as total,
       COUNT(*) as count
     FROM records 
-    WHERE book_id = ? AND direction = ?
+    WHERE CAST(TRIM(CAST(book_id AS TEXT)) AS INTEGER) = ? AND direction = ?
   `;
-  const params = [bookId, direction];
+  const params = [bookIdInt, direction];
 
   if (startDate) {
     sql += ' AND date >= ?';
@@ -257,8 +278,9 @@ function getCategorySummary(bookId, options = {}) {
     params.push(endDate);
   }
   if (member_id) {
-    sql += ' AND member_id = ?';
-    params.push(member_id);
+    const memberIdInt = Number(member_id);
+    sql += ' AND CAST(TRIM(CAST(member_id AS TEXT)) AS INTEGER) = ?';
+    params.push(memberIdInt);
   }
 
   sql += ' GROUP BY category ORDER BY total DESC';

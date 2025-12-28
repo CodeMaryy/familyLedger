@@ -15,6 +15,9 @@ const { queryAll, queryOne, run } = require('./db');
  */
 function listBudgets(bookId, options = {}) {
   const { direction, period, member_id } = options;
+  
+  // 确保 bookId 是数字类型
+  const bookIdInt = Number(bookId);
 
   let sql = `
     SELECT 
@@ -23,9 +26,9 @@ function listBudgets(bookId, options = {}) {
       m.name as member_name
     FROM budgets b
     LEFT JOIN members m ON b.member_id = m.id
-    WHERE b.book_id = ?
+    WHERE CAST(TRIM(CAST(b.book_id AS TEXT)) AS INTEGER) = ?
   `;
-  const params = [bookId];
+  const params = [bookIdInt];
 
   if (direction) {
     sql += ' AND b.direction = ?';
@@ -36,8 +39,9 @@ function listBudgets(bookId, options = {}) {
     params.push(period);
   }
   if (member_id) {
-    sql += ' AND b.member_id = ?';
-    params.push(member_id);
+    const memberIdInt = Number(member_id);
+    sql += ' AND CAST(TRIM(CAST(b.member_id AS TEXT)) AS INTEGER) = ?';
+    params.push(memberIdInt);
   }
 
   sql += ' ORDER BY b.category ASC';
@@ -51,6 +55,7 @@ function listBudgets(bookId, options = {}) {
  * @returns {Object|undefined} 预算信息
  */
 function getBudgetById(id) {
+  const idInt = Number(id);
   return queryOne(`
     SELECT 
       b.id, b.book_id, b.member_id, b.direction, b.category, 
@@ -58,8 +63,8 @@ function getBudgetById(id) {
       m.name as member_name
     FROM budgets b
     LEFT JOIN members m ON b.member_id = m.id
-    WHERE b.id = ?
-  `, [id]);
+    WHERE CAST(TRIM(CAST(b.id AS TEXT)) AS INTEGER) = ?
+  `, [idInt]);
 }
 
 /**
@@ -82,17 +87,22 @@ function addBudget(data) {
       amount === undefined || period === undefined || date === undefined) {
     throw new Error('预算数据不完整：book_id, direction, category, amount, period, date 为必需字段');
   }
+  
+  // 确保所有 id 字段都是数字类型
+  const bookIdInt = Number(book_id);
+  const memberIdInt = member_id ? Number(member_id) : null;
 
   // 查询是否已存在相同 book_id + category 的预算，取最新的一条
   const existing = queryOne(`
     SELECT id FROM budgets 
-    WHERE book_id = ? AND category = ?
+    WHERE CAST(TRIM(CAST(book_id AS TEXT)) AS INTEGER) = ? AND category = ?
     ORDER BY id DESC
     LIMIT 1
-  `, [book_id, category]);
+  `, [bookIdInt, category]);
 
   if (existing) {
     // 存在则更新
+    const existingIdInt = Number(existing.id);
     run(`
       UPDATE budgets 
       SET member_id = ?,
@@ -100,8 +110,8 @@ function addBudget(data) {
           amount = ?,
           period = ?,
           date = ?
-      WHERE id = ?
-    `, [member_id, direction, amount, period, date, existing.id]);
+      WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+    `, [memberIdInt, direction, amount, period, date, existingIdInt]);
 
     return {
       id: existing.id,
@@ -118,7 +128,7 @@ function addBudget(data) {
     const result = run(`
       INSERT INTO budgets (book_id, member_id, direction, category, amount, period, date) 
       VALUES (?, ?, ?, ?, ?, ?, ?)
-    `, [book_id, member_id, direction, category, amount, period, date]);
+    `, [bookIdInt, memberIdInt, direction, category, amount, period, date]);
 
     return {
       id: result.lastInsertRowid,
@@ -141,6 +151,10 @@ function addBudget(data) {
  */
 function updateBudget(id, data) {
   const { member_id, direction, category, amount, period, date } = data;
+  
+  // 确保所有 id 字段都是数字类型
+  const idInt = Number(id);
+  const memberIdInt = member_id ? Number(member_id) : null;
 
   const result = run(`
     UPDATE budgets 
@@ -150,8 +164,8 @@ function updateBudget(id, data) {
         amount = COALESCE(?, amount),
         period = COALESCE(?, period),
         date = COALESCE(?, date)
-    WHERE id = ?
-  `, [member_id, direction, category, amount, period, date, id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [memberIdInt, direction, category, amount, period, date, idInt]);
 
   return {
     success: result.changes > 0,
@@ -166,7 +180,8 @@ function updateBudget(id, data) {
  */
 function deleteBudget(id) {
   console.log('[Database] deleteBudget called with id:', id);
-  const result = run('DELETE FROM budgets WHERE id = ?', [id]);
+  const idInt = Number(id);
+  const result = run('DELETE FROM budgets WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?', [idInt]);
   console.log('[Database] deleteBudget SQL result:', result);
 
   const deleteResult = {
@@ -187,17 +202,20 @@ function deleteBudget(id) {
  */
 function getBudgetExecution(bookId, options = {}) {
   const { startDate, endDate } = options;
+  
+  // 确保 bookId 是数字类型
+  const bookIdInt = Number(bookId);
 
   // 获取所有预算
-  const budgets = listBudgets(bookId);
+  const budgets = listBudgets(bookIdInt);
 
   // 获取实际支出/收入
   let sql = `
     SELECT category, direction, SUM(amount) as actual
     FROM records 
-    WHERE book_id = ?
+    WHERE CAST(TRIM(CAST(book_id AS TEXT)) AS INTEGER) = ?
   `;
-  const params = [bookId];
+  const params = [bookIdInt];
 
   if (startDate) {
     sql += ' AND date >= ?';

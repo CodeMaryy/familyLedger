@@ -22,11 +22,12 @@ function listMembers() {
  * @returns {Object|undefined} 成员信息
  */
 function getMemberById(id) {
+  const idInt = Number(id);
   return queryOne(`
     SELECT id, name, avatar, created_at 
     FROM members 
-    WHERE id = ?
-  `, [id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [idInt]);
 }
 
 /**
@@ -62,13 +63,16 @@ function addMember(data) {
  */
 function updateMember(id, data) {
   const { name, avatar } = data;
+  
+  // 确保 id 是数字类型
+  const idInt = Number(id);
 
   const result = run(`
     UPDATE members 
     SET name = COALESCE(?, name),
         avatar = COALESCE(?, avatar)
-    WHERE id = ?
-  `, [name, avatar, id]);
+    WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?
+  `, [name, avatar, idInt]);
 
   return {
     success: result.changes > 0,
@@ -82,7 +86,8 @@ function updateMember(id, data) {
  * @returns {Object} 删除结果
  */
 function deleteMember(id) {
-  const result = run('DELETE FROM members WHERE id = ?', [id]);
+  const idInt = Number(id);
+  const result = run('DELETE FROM members WHERE CAST(TRIM(CAST(id AS TEXT)) AS INTEGER) = ?', [idInt]);
 
   return {
     success: result.changes > 0,
